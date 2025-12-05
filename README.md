@@ -30,7 +30,8 @@ Edit `.env.local` with your Supabase credentials:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 DATABASE_URL=postgresql://...
 ```
 
@@ -142,6 +143,17 @@ This template enforces Test-Driven Development:
 4. **🎭 E2E** - Verify in real browser
 
 Amp's `tdd_cycle` tool guides you through each phase.
+
+## Auth with Next.js Proxy
+
+This template uses Next.js 16's Proxy pattern for Supabase auth token refresh. The key files:
+
+- `src/proxy.ts` - Proxy entry point that runs on every request
+- `src/lib/supabase/proxy.ts` - Session update logic using `getClaims()`
+- `src/lib/supabase/server.ts` - Server-side Supabase client
+- `src/lib/supabase/client.ts` - Browser Supabase client
+
+The Proxy automatically refreshes auth tokens and redirects unauthenticated users to `/login`.
 
 ## MCP Integration
 
