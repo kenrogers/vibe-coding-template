@@ -1,66 +1,111 @@
 # Vibe Coding Template
 
-> **Production-ready coding template** with compound engineering principles built-in.
-
-A Next.js 14 template designed for AI-assisted development using TDD, with Supabase and Drizzle ORM.
-
-## Philosophy: Compound Engineering
-
-Each unit of engineering work should make subsequent units of work easier—not harder.
-
-- ✅ **TDD by default** - Write tests first, then implementation
-- ✅ **AI-optimized** - AGENTS.md files guide AI assistants
-- ✅ **Toolbox ready** - Amp Toolboxes for automated workflows
-- ✅ **Quality gates** - Typecheck → Lint → Unit Tests → E2E
-
-## Quick Start
-
-```bash
-# Clone the template
-git clone https://github.com/your-org/vibe-coding-template.git my-app
-cd my-app
-
-# Install dependencies
-pnpm install
-
-# Set up environment
-cp .env.example .env.local
-# Edit .env.local with your credentials
-
-# Install Playwright browsers
-pnpm playwright install
-
-# Start development
-pnpm dev
-```
+A production-ready Next.js template optimized for AI-assisted development with [Amp](https://ampcode.com). Built with compound engineering principles where each feature makes future development easier.
 
 ## Tech Stack
 
-| Technology | Purpose |
-|------------|---------|
-| **Next.js 14** | React framework with App Router |
-| **Tailwind CSS** | Utility-first styling |
-| **Supabase** | Auth, Database, Realtime, Storage |
-| **Drizzle ORM** | Type-safe database queries |
-| **Vitest** | Unit testing |
-| **Playwright** | E2E testing |
+- **Next.js 16** + React 19 with App Router
+- **Supabase** for auth, database, and storage
+- **Drizzle ORM** for type-safe database queries
+- **Tailwind CSS** for styling
+- **Vitest** + **Playwright** for testing
 
-## Commands
+## Quick Start
+
+### 1. Clone and Install
+
+```bash
+git clone https://github.com/kenrogers/vibe-coding-template.git my-app
+cd my-app
+pnpm install
+```
+
+### 2. Set Up Environment
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local` with your Supabase credentials:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+DATABASE_URL=postgresql://...
+```
+
+### 3. Install Playwright Browsers
+
+```bash
+pnpm playwright install
+```
+
+### 4. Start Development
+
+```bash
+pnpm dev
+```
+
+## Using with Amp
+
+This template includes custom Amp tools in `.amp/tools/` that automate common workflows. Amp automatically reads the `AGENTS.md` file for project conventions.
+
+### Amp Tools Available
+
+| Category | Tool | What It Does |
+|----------|------|--------------|
+| **Scaffolding** | `scaffold_component` | Generate React component + test file |
+| | `scaffold_api_route` | Generate API route with Zod validation |
+| | `scaffold_db_table` | Generate Drizzle schema + types |
+| **Development** | `find_pattern` | Discover existing patterns before building |
+| | `tdd_cycle` | Guide TDD red/green/refactor workflow |
+| | `quality_check` | Run full quality pipeline |
+| | `run_tests` | Run Vitest unit tests |
+| | `run_e2e` | Run Playwright E2E tests |
+| **Database** | `db_migrate` | Manage Drizzle migrations |
+| | `supabase_cli` | Supabase CLI operations |
+| **Setup** | `env_doctor` | Validate environment configuration |
+| | `typecheck` | TypeScript type checking |
+
+### Recommended Workflow
+
+When building features with Amp, follow this pattern:
+
+1. **Research** - Ask Amp to find existing patterns: *"Find how we handle components in this codebase"*
+2. **Scaffold** - Generate boilerplate: *"Scaffold a UserCard component"*
+3. **TDD** - Write tests first: *"Write a failing test for the UserCard component"*
+4. **Implement** - Make tests pass: *"Implement UserCard to make the test pass"*
+5. **Verify** - Run quality checks: *"Run the quality check"*
+
+### Example Prompts
+
+```
+"Add a new API route for user profiles with GET and POST methods"
+
+"Create a projects table with id, title, and status columns"
+
+"Write E2E tests for the login flow"
+
+"Run the full quality check before I commit"
+```
+
+## Commands Reference
 
 ```bash
 # Development
 pnpm dev              # Start dev server
 pnpm build            # Production build
-pnpm start            # Start production
+pnpm start            # Start production server
 
 # Quality Checks
 pnpm typecheck        # TypeScript checking
 pnpm lint             # ESLint
 pnpm lint:fix         # Auto-fix lint issues
+pnpm quality          # Run all checks
 
 # Testing
 pnpm test             # Run unit tests
-pnpm test:watch       # Watch mode (TDD)
+pnpm test:watch       # Watch mode for TDD
 pnpm test:coverage    # Coverage report
 pnpm test:e2e         # E2E tests
 pnpm test:e2e:ui      # Playwright UI mode
@@ -68,104 +113,46 @@ pnpm test:e2e:ui      # Playwright UI mode
 # Database
 pnpm db:generate      # Generate migrations
 pnpm db:migrate       # Run migrations
-pnpm db:push          # Push schema (dev)
-pnpm db:studio        # Drizzle Studio
+pnpm db:push          # Push schema (dev only)
+pnpm db:studio        # Open Drizzle Studio
 ```
 
 ## Project Structure
 
 ```
-├── .amp/
-│   └── tools/              # Amp Toolboxes
-│       ├── run_tests       # Unit test runner
-│       ├── run_e2e         # E2E test runner
-│       ├── typecheck       # Type checker
-│       ├── quality_check   # Full quality pipeline
-│       ├── tdd_cycle       # TDD workflow helper
-│       └── db_migrate      # Database migrations
+├── .amp/tools/         # Amp custom tools
 ├── src/
-│   ├── app/                # Next.js App Router
-│   │   ├── api/            # API routes
-│   │   └── ...
-│   ├── components/         # React components
-│   │   └── ui/             # Primitive components
-│   ├── lib/
-│   │   ├── db/             # Drizzle ORM + schema
-│   │   └── supabase/       # Supabase clients
-│   ├── hooks/              # Custom hooks
-│   └── types/              # TypeScript types
-├── tests/
-│   └── e2e/                # Playwright tests
-├── AGENTS.md               # Root AI guidelines
-└── README.md
+│   ├── app/            # Next.js App Router pages & API routes
+│   ├── components/     # React components (ui/ and features/)
+│   ├── lib/            # Shared utilities (db/, supabase/)
+│   ├── hooks/          # Custom React hooks
+│   └── types/          # TypeScript type definitions
+├── tests/e2e/          # Playwright E2E tests
+├── AGENTS.md           # AI assistant conventions
+└── .env.example        # Environment template
 ```
 
-## AI-Assisted Development
+## TDD Workflow
 
-This template is optimized for AI coding assistants like Amp. Each folder contains an `AGENTS.md` file with:
+This template enforces Test-Driven Development:
 
-- Folder-specific conventions
-- Example patterns to follow
-- Testing requirements
-- Common pitfalls to avoid
+1. **🔴 Red** - Write a failing test
+2. **🟢 Green** - Write minimum code to pass
+3. **🔵 Refactor** - Clean up while tests pass
+4. **🎭 E2E** - Verify in real browser
 
-### Amp Toolboxes
+Amp's `tdd_cycle` tool guides you through each phase.
 
-The `.amp/tools/` directory contains executable tools for common workflows:
+## MCP Integration
 
-| Tool | Purpose |
-|------|---------|
-| `run_tests` | Run Vitest with optional patterns |
-| `run_e2e` | Run Playwright E2E tests |
-| `typecheck` | TypeScript type checking |
-| `quality_check` | Full quality pipeline |
-| `tdd_cycle` | Guide TDD red-green-refactor |
-| `db_migrate` | Drizzle migration helpers |
+When `pnpm dev` is running, Amp connects via Next.js MCP to access:
 
-### TDD Workflow
+- Build and runtime errors
+- Browser console logs
+- Page metadata and routes
+- Server Action information
 
-When adding features, follow this cycle:
-
-```
-1. 🔴 RED    - Write a failing test
-2. 🟢 GREEN  - Write minimum code to pass
-3. 🔵 REFACTOR - Clean up while tests pass
-4. 🎭 E2E   - Verify in real browser
-```
-
-The AI assistant will use `tdd_cycle` to guide this process.
-
-## Environment Variables
-
-Copy `.env.example` to `.env.local` and fill in:
-
-```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-
-# Database
-DATABASE_URL=postgresql://...
-```
-
-## Database Setup
-
-1. Create a Supabase project at [supabase.com](https://supabase.com)
-2. Copy the connection string to `DATABASE_URL`
-3. Run migrations:
-
-```bash
-pnpm db:push   # Quick dev sync
-# or
-pnpm db:generate && pnpm db:migrate  # Production
-```
-
-## Contributing
-
-1. Follow TDD - write tests first
-2. Run quality checks before committing
-3. Update AGENTS.md files when adding patterns
+This is configured in `.mcp.json`.
 
 ## License
 
