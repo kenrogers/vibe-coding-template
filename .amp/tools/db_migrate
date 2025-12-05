@@ -1,0 +1,58 @@
+#!/bin/bash
+# Amp Toolbox: Database migration helper
+# Usage: Generate and run Drizzle migrations
+
+if [ "$TOOLBOX_ACTION" = "describe" ]; then
+    cat <<EOF
+name: db_migrate
+description: Manage database migrations with Drizzle. Use 'generate' after schema changes, 'push' for quick dev iteration, or 'migrate' for production deployments.
+action: string Action to perform: 'generate' (create migration), 'push' (dev sync), 'migrate' (run migrations), or 'studio' (open Drizzle Studio)
+name: string? Migration name (required for 'generate' action)
+EOF
+    exit 0
+fi
+
+# Parse input
+ACTION=""
+NAME=""
+
+while IFS='=' read -r key value; do
+    case "$key" in
+        action) ACTION="$value" ;;
+        name) NAME="$value" ;;
+    esac
+done
+
+cd "$(dirname "$0")/../.." || exit 1
+
+case "$ACTION" in
+    generate)
+        if [ -z "$NAME" ]; then
+            echo "Error: Migration name required for generate action"
+            exit 1
+        fi
+        echo "Generating migration: $NAME"
+        pnpm drizzle-kit generate --name "$NAME"
+        ;;
+    push)
+        echo "Pushing schema changes to database (dev only)..."
+        pnpm drizzle-kit push
+        ;;
+    migrate)
+        echo "Running pending migrations..."
+        pnpm drizzle-kit migrate
+        ;;
+    studio)
+        echo "Opening Drizzle Studio..."
+        pnpm drizzle-kit studio
+        ;;
+    *)
+        echo "Usage: db_migrate action=<generate|push|migrate|studio>"
+        echo ""
+        echo "Actions:"
+        echo "  generate - Create a new migration from schema changes"
+        echo "  push     - Quick sync schema to dev database"
+        echo "  migrate  - Run pending migrations"
+        echo "  studio   - Open Drizzle Studio GUI"
+        ;;
+esac

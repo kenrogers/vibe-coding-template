@@ -1,0 +1,16 @@
+#!/bin/bash
+# Amp Toolbox: Run TypeScript type checking
+# Usage: Verify type safety before committing
+
+if [ "$TOOLBOX_ACTION" = "describe" ]; then
+    cat <<EOF
+name: typecheck
+description: Run TypeScript type checking on the codebase. Use this after making changes to ensure type safety. This should be run before committing any code.
+EOF
+    exit 0
+fi
+
+cd "$(dirname "$0")/../.." || exit 1
+
+echo "Running TypeScript type checking..."
+pnpm tsc --noEmit

@@ -1,0 +1,329 @@
+#!/bin/bash
+# Amp Toolbox: Scaffold API Route
+# Creates a Next.js API route with Zod validation following project conventions
+
+if [ "$TOOLBOX_ACTION" = "describe" ]; then
+    cat <<EOF
+name: scaffold_api_route
+description: Generate a Next.js App Router API route with Zod validation and proper error handling. Creates route.ts following project conventions (consistent error shapes, HTTP status codes, JSDoc). Use this instead of manually creating API routes.
+path: string API route path without /api prefix (e.g., 'users', 'projects/[id]')
+methods: string Comma-separated HTTP methods: GET,POST,PUT,DELETE,PATCH
+resource: string Resource name for types and schemas (e.g., 'User', 'Project')
+fields: string? Comma-separated fields for request body schema like "email:email,name:string,age:number?"
+streaming: boolean? Whether this returns a streaming response (like AI chat). Default: false
+auth: boolean? Whether to require authentication. Default: false
+EOF
+    exit 0
+fi
+
+# Parse input
+ROUTE_PATH=""
+METHODS=""
+RESOURCE=""
+FIELDS=""
+STREAMING="false"
+AUTH="false"
+
+while IFS='=' read -r key value; do
+    case "$key" in
+        path) ROUTE_PATH="$value" ;;
+        methods) METHODS="$value" ;;
+        resource) RESOURCE="$value" ;;
+        fields) FIELDS="$value" ;;
+        streaming) STREAMING="$value" ;;
+        auth) AUTH="$value" ;;
+    esac
+done
+
+cd "$(dirname "$0")/../.." || exit 1
+
+# Validation
+if [ -z "$ROUTE_PATH" ]; then
+    echo "Error: path is required"
+    echo "Usage: scaffold_api_route path=users methods=GET,POST resource=User"
+    exit 1
+fi
+
+if [ -z "$METHODS" ]; then
+    echo "Error: methods is required (e.g., GET,POST)"
+    exit 1
+fi
+
+if [ -z "$RESOURCE" ]; then
+    echo "Error: resource name is required (e.g., User)"
+    exit 1
+fi
+
+# Create directory
+DIR="src/app/api/$ROUTE_PATH"
+mkdir -p "$DIR"
+
+ROUTE_FILE="$DIR/route.ts"
+
+# Check if file exists
+if [ -f "$ROUTE_FILE" ]; then
+    echo "Error: $ROUTE_FILE already exists"
+    exit 1
+fi
+
+# Convert resource to lowercase for variable names
+RESOURCE_LOWER=$(echo "$RESOURCE" | sed 's/\([A-Z]\)/_\L\1/g' | sed 's/^_//')
+
+# Build Zod schema from fields
+ZOD_SCHEMA=""
+if [ -n "$FIELDS" ]; then
+    ZOD_FIELDS=""
+    IFS=',' read -ra FIELD_ARRAY <<< "$FIELDS"
+    for field in "${FIELD_ARRAY[@]}"; do
+        field_name="${field%%:*}"
+        field_type="${field#*:}"
+        optional=""
+        
+        # Check for optional marker
+        if [[ "$field_type" == *"?" ]]; then
+            field_type="${field_type%?}"
+            optional=".optional()"
+        fi
+        
+        # Convert to Zod type
+        case "$field_type" in
+            email) zod_type="z.string().email()" ;;
+            string) zod_type="z.string().min(1)" ;;
+            number) zod_type="z.number()" ;;
+            boolean) zod_type="z.boolean()" ;;
+            uuid) zod_type="z.string().uuid()" ;;
+            url) zod_type="z.string().url()" ;;
+            date) zod_type="z.string().datetime()" ;;
+            *) zod_type="z.string()" ;;
+        esac
+        
+        ZOD_FIELDS="${ZOD_FIELDS}  ${field_name}: ${zod_type}${optional},\n"
+    done
+    
+    ZOD_SCHEMA="const Create${RESOURCE}Schema = z.object({\n${ZOD_FIELDS}});\n\nconst Update${RESOURCE}Schema = Create${RESOURCE}Schema.partial();\n"
+fi
+
+# Build imports
+IMPORTS="import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';"
+
+# Build method handlers
+HANDLERS=""
+
+IFS=',' read -ra METHOD_ARRAY <<< "$METHODS"
+for method in "${METHOD_ARRAY[@]}"; do
+    case "$method" in
+        GET)
+            HANDLERS="${HANDLERS}
+/**
+ * GET /api/${ROUTE_PATH}
+ * Retrieves ${RESOURCE} data
+ * @returns { data: ${RESOURCE}[] }
+ */
+export async function GET(request: NextRequest) {
+  try {
+    // TODO: Implement ${RESOURCE} retrieval
+    const data: unknown[] = [];
+    
+    return NextResponse.json({ data });
+  } catch (error) {
+    console.error('GET /api/${ROUTE_PATH} error:', error);
+    return NextResponse.json(
+      { error: 'Failed to retrieve ${RESOURCE}' },
+      { status: 500 }
+    );
+  }
+}
+"
+            ;;
+        POST)
+            if [ "$STREAMING" = "true" ]; then
+                HANDLERS="${HANDLERS}
+/**
+ * POST /api/${ROUTE_PATH}
+ * Creates a new ${RESOURCE} with streaming response
+ * @body Create${RESOURCE}Schema
+ * @returns Streaming response
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const result = Create${RESOURCE}Schema.safeParse(body);
+    
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: result.error.flatten() },
+        { status: 400 }
+      );
+    }
+    
+    // TODO: Implement streaming logic
+    const stream = new ReadableStream({
+      async start(controller) {
+        // Example: stream chunks
+        controller.enqueue(new TextEncoder().encode('data: hello\\n\\n'));
+        controller.close();
+      },
+    });
+    
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
+  } catch (error) {
+    console.error('POST /api/${ROUTE_PATH} error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+"
+            else
+                HANDLERS="${HANDLERS}
+/**
+ * POST /api/${ROUTE_PATH}
+ * Creates a new ${RESOURCE}
+ * @body Create${RESOURCE}Schema
+ * @returns { data: ${RESOURCE} }
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const result = Create${RESOURCE}Schema.safeParse(body);
+    
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: result.error.flatten() },
+        { status: 400 }
+      );
+    }
+    
+    // TODO: Implement ${RESOURCE} creation
+    const data = result.data;
+    
+    return NextResponse.json({ data }, { status: 201 });
+  } catch (error) {
+    console.error('POST /api/${ROUTE_PATH} error:', error);
+    return NextResponse.json(
+      { error: 'Failed to create ${RESOURCE}' },
+      { status: 500 }
+    );
+  }
+}
+"
+            fi
+            ;;
+        PUT)
+            HANDLERS="${HANDLERS}
+/**
+ * PUT /api/${ROUTE_PATH}
+ * Updates an existing ${RESOURCE}
+ * @body Update${RESOURCE}Schema
+ * @returns { data: ${RESOURCE} }
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const result = Update${RESOURCE}Schema.safeParse(body);
+    
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: result.error.flatten() },
+        { status: 400 }
+      );
+    }
+    
+    // TODO: Implement ${RESOURCE} update
+    const data = result.data;
+    
+    return NextResponse.json({ data });
+  } catch (error) {
+    console.error('PUT /api/${ROUTE_PATH} error:', error);
+    return NextResponse.json(
+      { error: 'Failed to update ${RESOURCE}' },
+      { status: 500 }
+    );
+  }
+}
+"
+            ;;
+        PATCH)
+            HANDLERS="${HANDLERS}
+/**
+ * PATCH /api/${ROUTE_PATH}
+ * Partially updates an existing ${RESOURCE}
+ * @body Update${RESOURCE}Schema
+ * @returns { data: ${RESOURCE} }
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const result = Update${RESOURCE}Schema.safeParse(body);
+    
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: result.error.flatten() },
+        { status: 400 }
+      );
+    }
+    
+    // TODO: Implement ${RESOURCE} partial update
+    const data = result.data;
+    
+    return NextResponse.json({ data });
+  } catch (error) {
+    console.error('PATCH /api/${ROUTE_PATH} error:', error);
+    return NextResponse.json(
+      { error: 'Failed to update ${RESOURCE}' },
+      { status: 500 }
+    );
+  }
+}
+"
+            ;;
+        DELETE)
+            HANDLERS="${HANDLERS}
+/**
+ * DELETE /api/${ROUTE_PATH}
+ * Deletes a ${RESOURCE}
+ * @returns { success: boolean }
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    // TODO: Implement ${RESOURCE} deletion
+    // const { searchParams } = new URL(request.url);
+    // const id = searchParams.get('id');
+    
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/${ROUTE_PATH} error:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete ${RESOURCE}' },
+      { status: 500 }
+    );
+  }
+}
+"
+            ;;
+    esac
+done
+
+# Generate route file
+cat > "$ROUTE_FILE" << ROUTE
+${IMPORTS}
+
+${ZOD_SCHEMA}
+${HANDLERS}
+ROUTE
+
+echo "✅ Created $ROUTE_FILE"
+echo ""
+echo "Next steps:"
+echo "  1. Implement the TODO sections with actual logic"
+echo "  2. Add database queries using Drizzle"
+echo "  3. Add authentication if needed"
+echo "  4. Write integration tests"

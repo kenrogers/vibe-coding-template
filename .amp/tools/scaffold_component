@@ -1,0 +1,251 @@
+#!/bin/bash
+# Amp Toolbox: Scaffold React Component
+# Creates a component + colocated test following project conventions
+
+if [ "$TOOLBOX_ACTION" = "describe" ]; then
+    cat <<EOF
+name: scaffold_component
+description: Generate a React component with colocated tests following project conventions. Creates ComponentName.tsx and ComponentName.test.tsx using existing patterns (like Button.tsx). Use this instead of manually creating components to ensure consistency.
+name: string Component name in PascalCase (e.g., UserCard, ProfileHeader)
+kind: string Where to create: 'ui' for primitives (src/components/ui) or 'feature' for domain-specific (src/components/features)
+client: boolean? Whether this needs 'use client' directive (for hooks, event handlers). Default: false (Server Component)
+props: string? Comma-separated props like "title:string,count:number,onClick:function,disabled:boolean?"
+variants: boolean? Include variant prop (primary/secondary/outline). Default: false
+sizes: boolean? Include size prop (sm/md/lg). Default: false
+EOF
+    exit 0
+fi
+
+# Parse input
+NAME=""
+KIND=""
+CLIENT="false"
+PROPS=""
+VARIANTS="false"
+SIZES="false"
+
+while IFS='=' read -r key value; do
+    case "$key" in
+        name) NAME="$value" ;;
+        kind) KIND="$value" ;;
+        client) CLIENT="$value" ;;
+        props) PROPS="$value" ;;
+        variants) VARIANTS="$value" ;;
+        sizes) SIZES="$value" ;;
+    esac
+done
+
+cd "$(dirname "$0")/../.." || exit 1
+
+# Validation
+if [ -z "$NAME" ]; then
+    echo "Error: Component name is required"
+    echo "Usage: scaffold_component name=UserCard kind=ui"
+    exit 1
+fi
+
+if [ -z "$KIND" ]; then
+    echo "Error: kind is required ('ui' or 'feature')"
+    exit 1
+fi
+
+# Determine directory
+case "$KIND" in
+    ui)
+        DIR="src/components/ui"
+        ;;
+    feature)
+        DIR="src/components/features"
+        ;;
+    *)
+        echo "Error: kind must be 'ui' or 'feature'"
+        exit 1
+        ;;
+esac
+
+# Create directory if needed
+mkdir -p "$DIR"
+
+COMPONENT_FILE="$DIR/$NAME.tsx"
+TEST_FILE="$DIR/$NAME.test.tsx"
+
+# Check if files exist
+if [ -f "$COMPONENT_FILE" ]; then
+    echo "Error: $COMPONENT_FILE already exists"
+    exit 1
+fi
+
+# Build props interface
+PROPS_INTERFACE=""
+PROPS_DESTRUCTURE=""
+PROPS_DEFAULTS=""
+
+# Add variant/size props if requested
+if [ "$VARIANTS" = "true" ]; then
+    PROPS_INTERFACE="${PROPS_INTERFACE}  variant?: 'primary' | 'secondary' | 'outline'\n"
+    PROPS_DESTRUCTURE="${PROPS_DESTRUCTURE}variant = 'primary', "
+fi
+
+if [ "$SIZES" = "true" ]; then
+    PROPS_INTERFACE="${PROPS_INTERFACE}  size?: 'sm' | 'md' | 'lg'\n"
+    PROPS_DESTRUCTURE="${PROPS_DESTRUCTURE}size = 'md', "
+fi
+
+# Parse custom props
+if [ -n "$PROPS" ]; then
+    IFS=',' read -ra PROP_ARRAY <<< "$PROPS"
+    for prop in "${PROP_ARRAY[@]}"; do
+        prop_name="${prop%%:*}"
+        prop_type="${prop#*:}"
+        optional=""
+        
+        # Check for optional marker
+        if [[ "$prop_type" == *"?" ]]; then
+            prop_type="${prop_type%?}"
+            optional="?"
+        fi
+        
+        # Convert type keywords
+        case "$prop_type" in
+            function) prop_type="() => void" ;;
+            boolean) prop_type="boolean" ;;
+            number) prop_type="number" ;;
+            string) prop_type="string" ;;
+        esac
+        
+        PROPS_INTERFACE="${PROPS_INTERFACE}  ${prop_name}${optional}: ${prop_type}\n"
+        PROPS_DESTRUCTURE="${PROPS_DESTRUCTURE}${prop_name}, "
+    done
+fi
+
+# Add children and className
+PROPS_INTERFACE="${PROPS_INTERFACE}  children?: React.ReactNode\n  className?: string"
+PROPS_DESTRUCTURE="${PROPS_DESTRUCTURE}children, className = ''"
+
+# Build use client directive
+USE_CLIENT=""
+if [ "$CLIENT" = "true" ]; then
+    USE_CLIENT="'use client'\n\n"
+fi
+
+# Build variant/size styling
+VARIANT_STYLES=""
+SIZE_STYLES=""
+VARIANT_CLASSES=""
+SIZE_CLASSES=""
+
+if [ "$VARIANTS" = "true" ]; then
+    VARIANT_STYLES="
+  const variants = {
+    primary: 'bg-blue-600 text-white hover:bg-blue-700',
+    secondary: 'bg-gray-600 text-white hover:bg-gray-700',
+    outline: 'border border-gray-300 bg-transparent hover:bg-gray-100',
+  }
+"
+    VARIANT_CLASSES=' \${variants[variant]}'
+fi
+
+if [ "$SIZES" = "true" ]; then
+    SIZE_STYLES="
+  const sizes = {
+    sm: 'px-3 py-1.5 text-sm',
+    md: 'px-4 py-2 text-base',
+    lg: 'px-6 py-3 text-lg',
+  }
+"
+    SIZE_CLASSES=' \${sizes[size]}'
+fi
+
+# Generate component file
+cat > "$COMPONENT_FILE" << COMPONENT
+${USE_CLIENT}export interface ${NAME}Props {
+$(echo -e "$PROPS_INTERFACE")
+}
+
+export function ${NAME}({ ${PROPS_DESTRUCTURE} }: ${NAME}Props) {${VARIANT_STYLES}${SIZE_STYLES}
+  return (
+    <div className={\`${VARIANT_CLASSES}${SIZE_CLASSES} \${className}\`}>
+      {children}
+    </div>
+  )
+}
+COMPONENT
+
+echo "✅ Created $COMPONENT_FILE"
+
+# Generate test file
+cat > "$TEST_FILE" << TEST
+import { render, screen } from '@testing-library/react'
+import { describe, it, expect } from 'vitest'
+import { ${NAME} } from './${NAME}'
+
+describe('${NAME}', () => {
+  it('renders children correctly', () => {
+    render(<${NAME}>Test content</${NAME}>)
+    expect(screen.getByText('Test content')).toBeInTheDocument()
+  })
+
+  it('applies custom className', () => {
+    render(<${NAME} className="custom-class">Content</${NAME}>)
+    const element = screen.getByText('Content')
+    expect(element).toHaveClass('custom-class')
+  })
+TEST
+
+# Add variant tests if needed
+if [ "$VARIANTS" = "true" ]; then
+    cat >> "$TEST_FILE" << VARIANT_TESTS
+
+  it('applies primary variant styles by default', () => {
+    render(<${NAME}>Primary</${NAME}>)
+    const element = screen.getByText('Primary')
+    expect(element).toHaveClass('bg-blue-600')
+  })
+
+  it('applies secondary variant styles', () => {
+    render(<${NAME} variant="secondary">Secondary</${NAME}>)
+    const element = screen.getByText('Secondary')
+    expect(element).toHaveClass('bg-gray-600')
+  })
+
+  it('applies outline variant styles', () => {
+    render(<${NAME} variant="outline">Outline</${NAME}>)
+    const element = screen.getByText('Outline')
+    expect(element).toHaveClass('border')
+  })
+VARIANT_TESTS
+fi
+
+# Add size tests if needed
+if [ "$SIZES" = "true" ]; then
+    cat >> "$TEST_FILE" << SIZE_TESTS
+
+  it('applies medium size by default', () => {
+    render(<${NAME}>Medium</${NAME}>)
+    const element = screen.getByText('Medium')
+    expect(element).toHaveClass('px-4')
+  })
+
+  it('applies small size styles', () => {
+    render(<${NAME} size="sm">Small</${NAME}>)
+    const element = screen.getByText('Small')
+    expect(element).toHaveClass('px-3')
+  })
+
+  it('applies large size styles', () => {
+    render(<${NAME} size="lg">Large</${NAME}>)
+    const element = screen.getByText('Large')
+    expect(element).toHaveClass('px-6')
+  })
+SIZE_TESTS
+fi
+
+# Close the describe block
+echo "})" >> "$TEST_FILE"
+
+echo "✅ Created $TEST_FILE"
+echo ""
+echo "Next steps:"
+echo "  1. Run tests: pnpm test -- $NAME"
+echo "  2. Customize the component implementation"
+echo "  3. Add more specific tests as needed"

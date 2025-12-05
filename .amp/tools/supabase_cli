@@ -1,0 +1,151 @@
+#!/bin/bash
+# Amp Toolbox: Supabase CLI wrapper
+# Usage: Interact with Supabase using the official CLI
+
+if [ "$TOOLBOX_ACTION" = "describe" ]; then
+    cat <<EOF
+name: supabase_cli
+description: Interact with Supabase using the official CLI. Use this for ALL database operations, migrations, auth management, and local development. Never use raw SQL or direct API calls when the CLI can do it.
+action: string Action to perform: 'start', 'stop', 'status', 'db-reset', 'db-diff', 'db-push', 'migration-new', 'migration-up', 'migration-list', 'gen-types', 'functions-serve', 'functions-deploy', 'link', 'login'
+name: string? Name for migrations or functions
+linked: boolean? Whether to run against linked remote project (default: local)
+EOF
+    exit 0
+fi
+
+# Parse input
+ACTION=""
+NAME=""
+LINKED=""
+
+while IFS='=' read -r key value; do
+    case "$key" in
+        action) ACTION="$value" ;;
+        name) NAME="$value" ;;
+        linked) LINKED="$value" ;;
+    esac
+done
+
+cd "$(dirname "$0")/../.." || exit 1
+
+# Check if supabase CLI is installed
+if ! command -v supabase &> /dev/null; then
+    echo "Error: Supabase CLI not installed."
+    echo "Install with: brew install supabase/tap/supabase"
+    echo "Or: npm install -g supabase"
+    exit 1
+fi
+
+case "$ACTION" in
+    start)
+        echo "Starting Supabase local development stack..."
+        supabase start
+        ;;
+    stop)
+        echo "Stopping Supabase local development stack..."
+        supabase stop
+        ;;
+    status)
+        echo "Checking Supabase status..."
+        supabase status
+        ;;
+    db-reset)
+        echo "Resetting local database (runs all migrations fresh)..."
+        supabase db reset
+        ;;
+    db-diff)
+        if [ -z "$NAME" ]; then
+            echo "Error: Migration name required. Use name=<migration_name>"
+            exit 1
+        fi
+        echo "Generating migration diff: $NAME"
+        supabase db diff -f "$NAME"
+        ;;
+    db-push)
+        if [ "$LINKED" = "true" ]; then
+            echo "Pushing migrations to remote database..."
+            supabase db push
+        else
+            echo "Pushing to local database..."
+            supabase db push --local
+        fi
+        ;;
+    migration-new)
+        if [ -z "$NAME" ]; then
+            echo "Error: Migration name required. Use name=<migration_name>"
+            exit 1
+        fi
+        echo "Creating new migration: $NAME"
+        supabase migration new "$NAME"
+        ;;
+    migration-up)
+        if [ "$LINKED" = "true" ]; then
+            echo "Running migrations on remote..."
+            supabase migration up --linked
+        else
+            echo "Running migrations locally..."
+            supabase migration up --local
+        fi
+        ;;
+    migration-list)
+        echo "Listing migrations..."
+        supabase migration list
+        ;;
+    gen-types)
+        echo "Generating TypeScript types from database schema..."
+        if [ "$LINKED" = "true" ]; then
+            supabase gen types typescript --linked > src/types/database.types.ts
+        else
+            supabase gen types typescript --local > src/types/database.types.ts
+        fi
+        echo "Types written to src/types/database.types.ts"
+        ;;
+    functions-serve)
+        echo "Starting Edge Functions locally..."
+        supabase functions serve
+        ;;
+    functions-deploy)
+        if [ -z "$NAME" ]; then
+            echo "Deploying all Edge Functions..."
+            supabase functions deploy
+        else
+            echo "Deploying function: $NAME"
+            supabase functions deploy "$NAME"
+        fi
+        ;;
+    link)
+        echo "Link to a Supabase project..."
+        supabase link
+        ;;
+    login)
+        echo "Logging in to Supabase..."
+        supabase login
+        ;;
+    *)
+        echo "Supabase CLI Wrapper"
+        echo ""
+        echo "Usage: supabase_cli action=<action> [name=<name>] [linked=true]"
+        echo ""
+        echo "Local Development:"
+        echo "  start          - Start local Supabase stack (Postgres, Auth, etc.)"
+        echo "  stop           - Stop local Supabase stack"
+        echo "  status         - Show status of local services"
+        echo ""
+        echo "Database & Migrations:"
+        echo "  db-reset       - Reset local DB and run all migrations"
+        echo "  db-diff        - Generate migration from schema changes (requires name=)"
+        echo "  db-push        - Push migrations (add linked=true for remote)"
+        echo "  migration-new  - Create empty migration file (requires name=)"
+        echo "  migration-up   - Run pending migrations"
+        echo "  migration-list - List all migrations"
+        echo ""
+        echo "Types & Functions:"
+        echo "  gen-types      - Generate TypeScript types from schema"
+        echo "  functions-serve  - Run Edge Functions locally"
+        echo "  functions-deploy - Deploy Edge Functions (optional name=)"
+        echo ""
+        echo "Project Management:"
+        echo "  link           - Link to remote Supabase project"
+        echo "  login          - Authenticate with Supabase"
+        ;;
+esac

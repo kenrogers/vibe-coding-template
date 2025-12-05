@@ -1,0 +1,52 @@
+#!/bin/bash
+# Amp Toolbox: Run all quality checks
+# Usage: Run before committing to ensure code quality
+
+if [ "$TOOLBOX_ACTION" = "describe" ]; then
+    cat <<EOF
+name: quality_check
+description: Run all quality checks (typecheck, lint, unit tests, E2E tests). Use this before committing or when you want to verify the entire codebase is in good shape. This is the compound engineering quality gate.
+skip_e2e: boolean? Skip E2E tests for faster feedback during development
+EOF
+    exit 0
+fi
+
+# Parse input
+SKIP_E2E=""
+
+while IFS='=' read -r key value; do
+    case "$key" in
+        skip_e2e) SKIP_E2E="$value" ;;
+    esac
+done
+
+cd "$(dirname "$0")/../.." || exit 1
+
+echo "=== Quality Check Pipeline ==="
+echo ""
+
+echo "1/4 TypeScript type checking..."
+pnpm tsc --noEmit || { echo "❌ Type check failed"; exit 1; }
+echo "✅ Type check passed"
+echo ""
+
+echo "2/4 ESLint..."
+pnpm eslint . --ext .ts,.tsx || { echo "❌ Lint failed"; exit 1; }
+echo "✅ Lint passed"
+echo ""
+
+echo "3/4 Unit tests..."
+pnpm vitest run || { echo "❌ Unit tests failed"; exit 1; }
+echo "✅ Unit tests passed"
+echo ""
+
+if [ "$SKIP_E2E" = "true" ]; then
+    echo "4/4 E2E tests... SKIPPED"
+else
+    echo "4/4 E2E tests..."
+    pnpm playwright test || { echo "❌ E2E tests failed"; exit 1; }
+    echo "✅ E2E tests passed"
+fi
+
+echo ""
+echo "=== All quality checks passed! ✅ ==="

@@ -1,0 +1,128 @@
+#!/bin/bash
+# Amp Toolbox: Run Playwright E2E tests via CLI
+# Usage: Run end-to-end tests using the Playwright CLI
+
+if [ "$TOOLBOX_ACTION" = "describe" ]; then
+    cat <<EOF
+name: run_e2e
+description: Run Playwright E2E tests using the CLI. Use this AFTER implementing a feature to verify it works in a real browser. Always prefer CLI commands over programmatic test running.
+action: string? Action: 'test' (default), 'codegen', 'show-report', 'install', 'debug', 'trace'
+spec: string? Specific test file or pattern (e.g., 'home.spec.ts' or 'auth')
+headed: boolean? Run tests with visible browser windows
+debug: boolean? Run in debug mode with Playwright Inspector
+project: string? Browser project to run (chromium, firefox, webkit)
+grep: string? Only run tests matching this pattern
+update_snapshots: boolean? Update visual snapshots
+trace_file: string? Path to trace file (for 'trace' action)
+EOF
+    exit 0
+fi
+
+# Parse input
+ACTION="test"
+SPEC=""
+HEADED=""
+DEBUG=""
+PROJECT=""
+GREP=""
+UPDATE_SNAPSHOTS=""
+TRACE_FILE=""
+
+while IFS='=' read -r key value; do
+    case "$key" in
+        action) ACTION="$value" ;;
+        spec) SPEC="$value" ;;
+        headed) HEADED="$value" ;;
+        debug) DEBUG="$value" ;;
+        project) PROJECT="$value" ;;
+        grep) GREP="$value" ;;
+        update_snapshots) UPDATE_SNAPSHOTS="$value" ;;
+        trace_file) TRACE_FILE="$value" ;;
+    esac
+done
+
+cd "$(dirname "$0")/../.." || exit 1
+
+case "$ACTION" in
+    test)
+        CMD="pnpm playwright test"
+        
+        if [ "$HEADED" = "true" ]; then
+            CMD="$CMD --headed"
+        fi
+        
+        if [ "$DEBUG" = "true" ]; then
+            CMD="$CMD --debug"
+        fi
+        
+        if [ -n "$PROJECT" ]; then
+            CMD="$CMD --project=$PROJECT"
+        fi
+        
+        if [ -n "$GREP" ]; then
+            CMD="$CMD --grep \"$GREP\""
+        fi
+        
+        if [ "$UPDATE_SNAPSHOTS" = "true" ]; then
+            CMD="$CMD --update-snapshots"
+        fi
+        
+        if [ -n "$SPEC" ]; then
+            CMD="$CMD $SPEC"
+        fi
+        
+        echo "Running E2E tests..."
+        eval $CMD
+        ;;
+    codegen)
+        echo "Starting Playwright codegen..."
+        echo "This will open a browser - interact with your app to generate test code."
+        if [ -n "$SPEC" ]; then
+            pnpm playwright codegen "$SPEC"
+        else
+            pnpm playwright codegen http://localhost:3000
+        fi
+        ;;
+    show-report)
+        echo "Opening Playwright HTML report..."
+        pnpm playwright show-report
+        ;;
+    install)
+        echo "Installing Playwright browsers..."
+        pnpm playwright install
+        ;;
+    debug)
+        echo "Running tests in debug mode with Playwright Inspector..."
+        PWDEBUG=1 pnpm playwright test $SPEC
+        ;;
+    trace)
+        if [ -z "$TRACE_FILE" ]; then
+            echo "Error: trace_file required for trace action"
+            echo "Run tests with tracing: pnpm playwright test --trace on"
+            exit 1
+        fi
+        echo "Opening trace viewer..."
+        pnpm playwright show-trace "$TRACE_FILE"
+        ;;
+    *)
+        echo "Playwright E2E Testing CLI"
+        echo ""
+        echo "Usage: run_e2e action=<action> [options]"
+        echo ""
+        echo "Actions:"
+        echo "  test        - Run E2E tests (default)"
+        echo "  codegen     - Generate tests by recording browser interactions"
+        echo "  show-report - Open the HTML test report"
+        echo "  install     - Install Playwright browsers"
+        echo "  debug       - Run tests with Playwright Inspector"
+        echo "  trace       - View a trace file from a test run"
+        echo ""
+        echo "Test Options:"
+        echo "  spec=<file>       - Run specific test file"
+        echo "  headed=true       - Show browser windows"
+        echo "  debug=true        - Enable debug mode"
+        echo "  project=chromium  - Run on specific browser"
+        echo "  grep=<pattern>    - Filter tests by name"
+        echo "  update_snapshots=true - Update visual snapshots"
+        ;;
+esac

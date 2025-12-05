@@ -1,0 +1,180 @@
+#!/bin/bash
+# Amp Toolbox: Scaffold Database Table
+# Creates a Drizzle schema file with types following project conventions
+
+if [ "$TOOLBOX_ACTION" = "describe" ]; then
+    cat <<EOF
+name: scaffold_db_table
+description: Generate a Drizzle ORM schema file with type exports following project conventions (like users.ts). Creates table definition with proper types for SELECT and INSERT. Use this instead of manually creating schema files.
+name: string Table name in snake_case (e.g., projects, user_settings)
+columns: string Column definitions as "name:type" pairs. Types: uuid, text, int, boolean, timestamp, json. Add ! for notNull, ? for optional, * for unique. Example: "id:uuid!*,title:text!,count:int,active:boolean,metadata:json?"
+timestamps: boolean? Add created_at and updated_at columns. Default: true
+EOF
+    exit 0
+fi
+
+# Parse input
+TABLE_NAME=""
+COLUMNS=""
+TIMESTAMPS="true"
+
+while IFS='=' read -r key value; do
+    case "$key" in
+        name) TABLE_NAME="$value" ;;
+        columns) COLUMNS="$value" ;;
+        timestamps) TIMESTAMPS="$value" ;;
+    esac
+done
+
+cd "$(dirname "$0")/../.." || exit 1
+
+# Validation
+if [ -z "$TABLE_NAME" ]; then
+    echo "Error: Table name is required"
+    echo "Usage: scaffold_db_table name=projects columns=\"id:uuid!*,title:text!,count:int\""
+    exit 1
+fi
+
+if [ -z "$COLUMNS" ]; then
+    echo "Error: columns are required"
+    echo "Example: columns=\"id:uuid!*,title:text!,description:text?,status:text!\""
+    exit 1
+fi
+
+# Convert table name to PascalCase for types
+TYPE_NAME=$(echo "$TABLE_NAME" | sed -r 's/(^|_)([a-z])/\U\2/g')
+
+# Create schema file
+SCHEMA_DIR="src/lib/db/schema"
+SCHEMA_FILE="$SCHEMA_DIR/$TABLE_NAME.ts"
+
+if [ -f "$SCHEMA_FILE" ]; then
+    echo "Error: $SCHEMA_FILE already exists"
+    exit 1
+fi
+
+# Track imports needed
+NEEDS_UUID="false"
+NEEDS_TEXT="false"
+NEEDS_INT="false"
+NEEDS_BOOLEAN="false"
+NEEDS_TIMESTAMP="false"
+NEEDS_JSON="false"
+
+# Parse columns and build definitions
+COLUMN_DEFS=""
+IFS=',' read -ra COL_ARRAY <<< "$COLUMNS"
+for col in "${COL_ARRAY[@]}"; do
+    col_name="${col%%:*}"
+    col_spec="${col#*:}"
+    
+    # Extract modifiers
+    not_null=""
+    unique=""
+    col_type="$col_spec"
+    
+    if [[ "$col_spec" == *"!"* ]]; then
+        not_null=".notNull()"
+        col_type="${col_type//!/}"
+    fi
+    
+    if [[ "$col_spec" == *"*"* ]]; then
+        unique=".unique()"
+        col_type="${col_type//\*/}"
+    fi
+    
+    if [[ "$col_spec" == *"?"* ]]; then
+        col_type="${col_type//\?/}"
+    fi
+    
+    # Map to Drizzle type
+    case "$col_type" in
+        uuid)
+            NEEDS_UUID="true"
+            if [ "$col_name" = "id" ]; then
+                drizzle_def="uuid(\"id\").primaryKey().defaultRandom()"
+            else
+                drizzle_def="uuid(\"$col_name\")${not_null}${unique}"
+            fi
+            ;;
+        text|string)
+            NEEDS_TEXT="true"
+            drizzle_def="text(\"$col_name\")${not_null}${unique}"
+            ;;
+        int|integer|number)
+            NEEDS_INT="true"
+            drizzle_def="integer(\"$col_name\")${not_null}${unique}"
+            ;;
+        boolean|bool)
+            NEEDS_BOOLEAN="true"
+            drizzle_def="boolean(\"$col_name\")${not_null}"
+            ;;
+        timestamp|datetime)
+            NEEDS_TIMESTAMP="true"
+            drizzle_def="timestamp(\"$col_name\", { withTimezone: true })${not_null}"
+            ;;
+        json|jsonb)
+            NEEDS_JSON="true"
+            drizzle_def="jsonb(\"$col_name\")${not_null}"
+            ;;
+        *)
+            NEEDS_TEXT="true"
+            drizzle_def="text(\"$col_name\")${not_null}${unique}"
+            ;;
+    esac
+    
+    COLUMN_DEFS="${COLUMN_DEFS}  ${col_name}: ${drizzle_def},\n"
+done
+
+# Add timestamps if requested
+if [ "$TIMESTAMPS" = "true" ]; then
+    NEEDS_TIMESTAMP="true"
+    COLUMN_DEFS="${COLUMN_DEFS}  createdAt: timestamp(\"created_at\", { withTimezone: true })\n    .notNull()\n    .defaultNow(),\n"
+    COLUMN_DEFS="${COLUMN_DEFS}  updatedAt: timestamp(\"updated_at\", { withTimezone: true })\n    .notNull()\n    .defaultNow(),\n"
+fi
+
+# Build imports
+IMPORTS="pgTable"
+[ "$NEEDS_UUID" = "true" ] && IMPORTS="$IMPORTS, uuid"
+[ "$NEEDS_TEXT" = "true" ] && IMPORTS="$IMPORTS, text"
+[ "$NEEDS_INT" = "true" ] && IMPORTS="$IMPORTS, integer"
+[ "$NEEDS_BOOLEAN" = "true" ] && IMPORTS="$IMPORTS, boolean"
+[ "$NEEDS_TIMESTAMP" = "true" ] && IMPORTS="$IMPORTS, timestamp"
+[ "$NEEDS_JSON" = "true" ] && IMPORTS="$IMPORTS, jsonb"
+
+# Generate schema file
+cat > "$SCHEMA_FILE" << SCHEMA
+import { ${IMPORTS} } from "drizzle-orm/pg-core";
+
+export const ${TABLE_NAME} = pgTable("${TABLE_NAME}", {
+$(echo -e "$COLUMN_DEFS" | sed 's/,$//')
+});
+
+export type ${TYPE_NAME} = typeof ${TABLE_NAME}.\$inferSelect;
+export type New${TYPE_NAME} = typeof ${TABLE_NAME}.\$inferInsert;
+SCHEMA
+
+echo "✅ Created $SCHEMA_FILE"
+
+# Check if index.ts exists and update it
+INDEX_FILE="$SCHEMA_DIR/index.ts"
+if [ -f "$INDEX_FILE" ]; then
+    # Check if already exported
+    if ! grep -q "from './${TABLE_NAME}'" "$INDEX_FILE"; then
+        echo "export * from './${TABLE_NAME}';" >> "$INDEX_FILE"
+        echo "✅ Added export to $INDEX_FILE"
+    fi
+else
+    cat > "$INDEX_FILE" << INDEX
+export * from './users';
+export * from './${TABLE_NAME}';
+INDEX
+    echo "✅ Created $INDEX_FILE"
+fi
+
+echo ""
+echo "Next steps:"
+echo "  1. Review the schema in $SCHEMA_FILE"
+echo "  2. Add any relations using Drizzle's relations API"
+echo "  3. Generate migration: pnpm db:generate"
+echo "  4. Apply to database: pnpm db:push (dev) or pnpm db:migrate (prod)"

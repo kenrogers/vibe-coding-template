@@ -1,0 +1,94 @@
+#!/bin/bash
+# Amp Toolbox: TDD Cycle Helper
+# Usage: Helps enforce the TDD workflow
+
+if [ "$TOOLBOX_ACTION" = "describe" ]; then
+    cat <<EOF
+name: tdd_cycle
+description: Guide the TDD (Test-Driven Development) workflow. This tool helps you follow the red-green-refactor cycle by running tests and providing feedback on what to do next.
+phase: string Which phase of TDD: 'red' (write failing test), 'green' (make it pass), or 'refactor' (clean up)
+test_file: string Path to the test file you're working on
+EOF
+    exit 0
+fi
+
+# Parse input
+PHASE=""
+TEST_FILE=""
+
+while IFS='=' read -r key value; do
+    case "$key" in
+        phase) PHASE="$value" ;;
+        test_file) TEST_FILE="$value" ;;
+    esac
+done
+
+cd "$(dirname "$0")/../.." || exit 1
+
+case "$PHASE" in
+    red)
+        echo "🔴 RED Phase: Write a failing test"
+        echo ""
+        echo "Current step: Write a test that describes the behavior you want."
+        echo "The test MUST fail initially - this proves it's testing something new."
+        echo ""
+        if [ -n "$TEST_FILE" ]; then
+            echo "Running test to confirm it fails..."
+            if pnpm vitest run "$TEST_FILE" 2>/dev/null; then
+                echo ""
+                echo "⚠️  Tests are passing! In the RED phase, tests should FAIL."
+                echo "Make sure you've written a test for NEW functionality."
+            else
+                echo ""
+                echo "✅ Test is failing as expected. Move to GREEN phase."
+            fi
+        fi
+        ;;
+    green)
+        echo "🟢 GREEN Phase: Make the test pass"
+        echo ""
+        echo "Current step: Write the MINIMUM code to make the test pass."
+        echo "Don't optimize yet - just make it work!"
+        echo ""
+        if [ -n "$TEST_FILE" ]; then
+            echo "Running test..."
+            if pnpm vitest run "$TEST_FILE"; then
+                echo ""
+                echo "✅ Test is passing! Move to REFACTOR phase."
+            else
+                echo ""
+                echo "⚠️  Test still failing. Keep implementing until it passes."
+            fi
+        fi
+        ;;
+    refactor)
+        echo "🔵 REFACTOR Phase: Clean up the code"
+        echo ""
+        echo "Current step: Improve the code while keeping tests green."
+        echo "- Remove duplication"
+        echo "- Improve naming"
+        echo "- Extract functions if needed"
+        echo ""
+        if [ -n "$TEST_FILE" ]; then
+            echo "Running test to ensure refactoring didn't break anything..."
+            if pnpm vitest run "$TEST_FILE"; then
+                echo ""
+                echo "✅ Tests still passing. Refactoring successful!"
+                echo "Ready for the next TDD cycle or to run E2E tests."
+            else
+                echo ""
+                echo "❌ Tests broke during refactoring! Undo and try again."
+            fi
+        fi
+        ;;
+    *)
+        echo "Usage: tdd_cycle phase=<red|green|refactor> test_file=<path>"
+        echo ""
+        echo "TDD Cycle:"
+        echo "  1. RED    - Write a failing test"
+        echo "  2. GREEN  - Make the test pass"
+        echo "  3. REFACTOR - Clean up the code"
+        echo ""
+        echo "This cycle should repeat for each piece of functionality."
+        ;;
+esac

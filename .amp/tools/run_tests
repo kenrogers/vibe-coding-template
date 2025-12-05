@@ -1,0 +1,42 @@
+#!/bin/bash
+# Amp Toolbox: Run unit tests with Vitest
+# Usage: Run specific test files or all tests
+
+if [ "$TOOLBOX_ACTION" = "describe" ]; then
+    cat <<EOF
+name: run_tests
+description: Run Vitest unit tests. Use this to verify your implementation after writing tests (TDD workflow). Always run tests after making changes to ensure nothing is broken.
+pattern: string? Glob pattern or file path to run specific tests (e.g., 'Button' or 'src/lib/utils.test.ts')
+watch: boolean? Run tests in watch mode for TDD workflow
+EOF
+    exit 0
+fi
+
+# Parse input
+PATTERN=""
+WATCH=""
+
+while IFS='=' read -r key value; do
+    case "$key" in
+        pattern) PATTERN="$value" ;;
+        watch) WATCH="$value" ;;
+    esac
+done
+
+cd "$(dirname "$0")/../.." || exit 1
+
+if [ "$WATCH" = "true" ]; then
+    echo "Starting tests in watch mode..."
+    if [ -n "$PATTERN" ]; then
+        pnpm vitest --watch "$PATTERN"
+    else
+        pnpm vitest --watch
+    fi
+else
+    echo "Running tests..."
+    if [ -n "$PATTERN" ]; then
+        pnpm vitest run "$PATTERN"
+    else
+        pnpm vitest run
+    fi
+fi

@@ -1,0 +1,181 @@
+#!/bin/bash
+# Amp Toolbox: Find Pattern
+# Discovers existing patterns in the codebase to follow
+
+if [ "$TOOLBOX_ACTION" = "describe" ]; then
+    cat <<EOF
+name: find_pattern
+description: Find existing patterns in the codebase to understand conventions before building something new. Use this to research how similar things are done. Returns file paths and key code snippets. ALWAYS use this before creating new components, API routes, or schemas.
+kind: string Pattern type: 'component', 'api', 'schema', 'hook', 'lib', 'test', 'ai', 'supabase'
+name: string? Filter by name (partial match)
+EOF
+    exit 0
+fi
+
+# Parse input
+KIND=""
+NAME=""
+
+while IFS='=' read -r key value; do
+    case "$key" in
+        kind) KIND="$value" ;;
+        name) NAME="$value" ;;
+    esac
+done
+
+cd "$(dirname "$0")/../.." || exit 1
+
+echo "=== Pattern Discovery: $KIND ==="
+echo ""
+
+case "$KIND" in
+    component)
+        echo "📁 Component files found:"
+        if [ -n "$NAME" ]; then
+            find src/components -name "*.tsx" ! -name "*.test.tsx" 2>/dev/null | grep -i "$NAME" | head -20
+        else
+            find src/components -name "*.tsx" ! -name "*.test.tsx" 2>/dev/null | head -20
+        fi
+        
+        echo ""
+        echo "📋 Example component pattern (Button.tsx):"
+        if [ -f "src/components/ui/Button.tsx" ]; then
+            head -20 src/components/ui/Button.tsx
+        fi
+        
+        echo ""
+        echo "🧪 Colocated test pattern:"
+        if [ -f "src/components/ui/Button.test.tsx" ]; then
+            head -15 src/components/ui/Button.test.tsx
+        fi
+        
+        echo ""
+        echo "📖 Guidelines: src/components/AGENTS.md"
+        ;;
+        
+    api)
+        echo "📁 API routes found:"
+        if [ -n "$NAME" ]; then
+            find src/app/api -name "route.ts" 2>/dev/null | grep -i "$NAME" | head -20
+        else
+            find src/app/api -name "route.ts" 2>/dev/null | head -20
+        fi
+        
+        echo ""
+        echo "📋 Example API route pattern:"
+        EXAMPLE_ROUTE=$(find src/app/api -name "route.ts" 2>/dev/null | head -1)
+        if [ -n "$EXAMPLE_ROUTE" ]; then
+            echo "From: $EXAMPLE_ROUTE"
+            head -30 "$EXAMPLE_ROUTE"
+        fi
+        
+        echo ""
+        echo "📖 Guidelines: src/app/api/AGENTS.md"
+        ;;
+        
+    schema)
+        echo "📁 Database schema files:"
+        if [ -n "$NAME" ]; then
+            find src/lib/db/schema -name "*.ts" ! -name "index.ts" 2>/dev/null | grep -i "$NAME" | head -20
+        else
+            find src/lib/db/schema -name "*.ts" ! -name "index.ts" 2>/dev/null | head -20
+        fi
+        
+        echo ""
+        echo "📋 Example schema pattern (users.ts):"
+        if [ -f "src/lib/db/schema/users.ts" ]; then
+            cat src/lib/db/schema/users.ts
+        fi
+        
+        echo ""
+        echo "📖 Guidelines: src/lib/db/AGENTS.md"
+        ;;
+        
+    hook)
+        echo "📁 Custom hooks found:"
+        if [ -n "$NAME" ]; then
+            find src -name "use*.ts" -o -name "use*.tsx" 2>/dev/null | grep -i "$NAME" | head -20
+        else
+            find src -name "use*.ts" -o -name "use*.tsx" 2>/dev/null | head -20
+        fi
+        
+        echo ""
+        echo "📋 Hook naming convention: use<PascalCase>.ts"
+        echo "   Example: useAuth.ts, useLocalStorage.ts"
+        ;;
+        
+    lib)
+        echo "📁 Library files found:"
+        if [ -n "$NAME" ]; then
+            find src/lib -name "*.ts" ! -path "*/db/migrations/*" 2>/dev/null | grep -i "$NAME" | head -20
+        else
+            find src/lib -name "*.ts" ! -path "*/db/migrations/*" 2>/dev/null | head -20
+        fi
+        
+        echo ""
+        echo "📋 Library structure:"
+        ls -la src/lib/ 2>/dev/null
+        
+        echo ""
+        echo "📖 Guidelines: src/lib/AGENTS.md"
+        ;;
+        
+    test)
+        echo "📁 Test files found:"
+        if [ -n "$NAME" ]; then
+            find src tests -name "*.test.ts" -o -name "*.test.tsx" -o -name "*.spec.ts" 2>/dev/null | grep -i "$NAME" | head -20
+        else
+            find src tests -name "*.test.ts" -o -name "*.test.tsx" -o -name "*.spec.ts" 2>/dev/null | head -20
+        fi
+        
+        echo ""
+        echo "📋 Test conventions:"
+        echo "  - Unit tests: *.test.ts(x) colocated with source"
+        echo "  - E2E tests: tests/e2e/*.spec.ts"
+        echo "  - Use vitest for unit, playwright for E2E"
+        ;;
+        
+    ai)
+        echo "📁 AI integration files:"
+        find src/lib/ai -name "*.ts" 2>/dev/null | head -20
+        
+        echo ""
+        echo "📋 AI module structure:"
+        ls -la src/lib/ai/ 2>/dev/null
+        
+        echo ""
+        echo "📋 OpenAI integration pattern:"
+        if [ -f "src/lib/ai/chat.ts" ]; then
+            head -40 src/lib/ai/chat.ts
+        fi
+        ;;
+        
+    supabase)
+        echo "📁 Supabase integration files:"
+        find src/lib/supabase -name "*.ts" 2>/dev/null | head -20
+        
+        echo ""
+        echo "📋 Supabase module structure:"
+        ls -la src/lib/supabase/ 2>/dev/null
+        
+        echo ""
+        if [ -f "src/lib/supabase/client.ts" ]; then
+            echo "📋 Client setup:"
+            cat src/lib/supabase/client.ts
+        fi
+        ;;
+        
+    *)
+        echo "Available pattern types:"
+        echo "  component - React components and tests"
+        echo "  api       - Next.js API routes"
+        echo "  schema    - Drizzle database schemas"
+        echo "  hook      - Custom React hooks"
+        echo "  lib       - Library utilities"
+        echo "  test      - Test files"
+        echo "  ai        - OpenAI integration"
+        echo "  supabase  - Supabase auth/client"
+        echo ""
+        echo "Usage: find_pattern kind=component name=Button"
+        ;;
+esac
